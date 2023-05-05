@@ -31,9 +31,7 @@ for i in tqdm(range(NUMBER_OF_IMAGES // num_of_images_in_single_loop)):
         sample, latents = generator(
             [sample_z], input_is_latent=False, return_latents=True, truncation=0.5, truncation_latent=mean_latent
         )
-    
-    latents = latents.cpu().detach().numpy()
-    
+    latents = latents.cpu().detach().numpy()	
     for index in range(len(sample)):
         if (counter % 1000) == 0:
             Path(f"{W_DATA_DIR}{int(counter / 1000)}").mkdir(parents=True, exist_ok=True)

@@ -6,7 +6,7 @@ from Configs import Global_Config
 
 def calc_Dw_loss(probs: torch.Tensor, label: int):
     labels = torch.full((probs.size(0),), label, dtype=torch.float, device=Global_Config.device)
-    criterion = nn.BCEWithLogitsLoss()
+    criterion = nn.BCELoss()
 
     adversarial_loss = criterion(probs, labels)
 
@@ -26,5 +26,3 @@ def compute_grad2(probs, w_input):
     grad_dout2 = grad_dout.pow(2)
     reg = grad_dout2.view(batch_size, -1).sum(1)
     return reg
-
-    

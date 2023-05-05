@@ -23,3 +23,5 @@ def landmark_loss(input_attr_lnd, output_lnd):
 def l2_loss(attr_images, generated_images):
     loss = l2_criterion(attr_images, generated_images)
     return loss
+
+

@@ -3,10 +3,158 @@ import random
 import torch
 from torch import nn
 from torch.nn import functional as F
-
+import torch.nn as nn
 from .op.fused_act import FusedLeakyReLU, fused_leaky_relu
 from .op.upfirdn2d import upfirdn2d
+import torchvision.transforms as transforms
+###Cartooner-----------------------------------------------------------------------------------------------
 
+class ResBlock(nn.Module):
+    def __init__(self, num_channel):
+        super(ResBlock, self).__init__()
+        self.conv_layer = nn.Sequential(
+            nn.Conv2d(num_channel, num_channel, 3, 1, 1),
+            nn.BatchNorm2d(num_channel),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(num_channel, num_channel, 3, 1, 1),
+            nn.BatchNorm2d(num_channel))
+        self.activation = nn.ReLU(inplace=True)
+
+    def forward(self, inputs):
+        output = self.conv_layer(inputs)
+        output = self.activation(output + inputs)
+        return output
+
+
+class DownBlock(nn.Module):
+    def __init__(self, in_channel, out_channel):
+        super(DownBlock, self).__init__()
+        self.conv_layer = nn.Sequential(
+            nn.Conv2d(in_channel, out_channel, 3, 2, 1),
+            nn.BatchNorm2d(out_channel),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(out_channel, out_channel, 3, 1, 1),
+            nn.BatchNorm2d(out_channel),
+            nn.ReLU(inplace=True))
+
+
+    def forward(self, inputs):
+        output = self.conv_layer(inputs)
+        return output
+
+
+class UpBlock(nn.Module):
+    def __init__(self, in_channel, out_channel, is_last=False):
+        super(UpBlock, self).__init__()
+        self.is_last = is_last
+        self.conv_layer = nn.Sequential(
+            nn.Conv2d(in_channel, in_channel, 3, 1, 1),
+            nn.BatchNorm2d(in_channel),
+            nn.ReLU(inplace=True),
+            nn.Upsample(scale_factor=2),
+            nn.Conv2d(in_channel, out_channel, 3, 1, 1))
+        self.act = nn.Sequential(
+            nn.BatchNorm2d(out_channel),
+            nn.ReLU(inplace=True))
+        self.last_act = nn.Tanh()
+
+
+    def forward(self, inputs):
+        output = self.conv_layer(inputs)
+        if self.is_last:
+            output = self.last_act(output)
+        else:
+            output = self.act(output)
+        return output
+
+
+
+class SimpleGenerator(nn.Module):
+    def __init__(self, num_channel=32, num_blocks=4):
+        super(SimpleGenerator, self).__init__()
+        self.down1 = DownBlock(3, num_channel)
+        self.down2 = DownBlock(num_channel, num_channel*2)
+        self.down3 = DownBlock(num_channel*2, num_channel*3)
+        self.down4 = DownBlock(num_channel*3, num_channel*4)
+        res_blocks = [ResBlock(num_channel*4)]*num_blocks
+        self.res_blocks = nn.Sequential(*res_blocks)
+        self.up1 = UpBlock(num_channel*4, num_channel*3)
+        self.up2 = UpBlock(num_channel*3, num_channel*2)
+        self.up3 = UpBlock(num_channel*2, num_channel)
+        self.up4 = UpBlock(num_channel, 3, is_last=True)
+
+    def forward(self, inputs):
+        down1 = self.down1(inputs)
+        down2 = self.down2(down1)
+        down3 = self.down3(down2)
+        down4 = self.down4(down3)
+        down4 = self.res_blocks(down4)
+        up1 = self.up1(down4)
+        up2 = self.up2(up1+down3)
+        up3 = self.up3(up2+down2)
+        up4 = self.up4(up3+down1)
+        return up4
+weight = torch.load('./weight.pth', map_location='cuda:0')
+model_style = SimpleGenerator()
+model_style.load_state_dict(weight)
+# torch.save(model.state_dict(), 'weight.pth')
+model_style.to('cuda:0')
+model_style.eval()
+
+    
+###--Sketcher------------------------------------------------------------------------------------------------------
+
+model_sketch = nn.Sequential(  # Sequential,
+    nn.Conv2d(1, 48, (5, 5), (2, 2), (2, 2)),
+    nn.ReLU(),
+    nn.Conv2d(48, 128, (3, 3), (1, 1), (1, 1)),
+    nn.ReLU(),
+    nn.Conv2d(128, 128, (3, 3), (1, 1), (1, 1)),
+    nn.ReLU(),
+    nn.Conv2d(128, 128, (3, 3), (2, 2), (1, 1)),
+    nn.ReLU(),
+    nn.Conv2d(128, 256, (3, 3), (1, 1), (1, 1)),
+    nn.ReLU(),
+    nn.Conv2d(256, 256, (3, 3), (1, 1), (1, 1)),
+    nn.ReLU(),
+    nn.Conv2d(256, 256, (3, 3), (2, 2), (1, 1)),
+    nn.ReLU(),
+    nn.Conv2d(256, 512, (3, 3), (1, 1), (1, 1)),
+    nn.ReLU(),
+    nn.Conv2d(512, 1024, (3, 3), (1, 1), (1, 1)),
+    nn.ReLU(),
+    nn.Conv2d(1024, 1024, (3, 3), (1, 1), (1, 1)),
+    nn.ReLU(),
+    nn.Conv2d(1024, 1024, (3, 3), (1, 1), (1, 1)),
+    nn.ReLU(),
+    nn.Conv2d(1024, 1024, (3, 3), (1, 1), (1, 1)),
+    nn.ReLU(),
+    nn.Conv2d(1024, 512, (3, 3), (1, 1), (1, 1)),
+    nn.ReLU(),
+    nn.Conv2d(512, 256, (3, 3), (1, 1), (1, 1)),
+    nn.ReLU(),
+    nn.ConvTranspose2d(256, 256, (4, 4), (2, 2), (1, 1), (0, 0)),
+    nn.ReLU(),
+    nn.Conv2d(256, 256, (3, 3), (1, 1), (1, 1)),
+    nn.ReLU(),
+    nn.Conv2d(256, 128, (3, 3), (1, 1), (1, 1)),
+    nn.ReLU(),
+    nn.ConvTranspose2d(128, 128, (4, 4), (2, 2), (1, 1), (0, 0)),
+    nn.ReLU(),
+    nn.Conv2d(128, 128, (3, 3), (1, 1), (1, 1)),
+    nn.ReLU(),
+    nn.Conv2d(128, 48, (3, 3), (1, 1), (1, 1)),
+    nn.ReLU(),
+    nn.ConvTranspose2d(48, 48, (4, 4), (2, 2), (1, 1), (0, 0)),
+    nn.ReLU(),
+    nn.Conv2d(48, 24, (3, 3), (1, 1), (1, 1)),
+    nn.ReLU(),
+    nn.Conv2d(24, 1, (3, 3), (1, 1), (1, 1)),
+    nn.Sigmoid(),
+)
+
+
+##--------------------------------------------------------------------------------------------------------------------------
 
 class PixelNorm(nn.Module):
     def __init__(self):
@@ -445,6 +593,8 @@ class Generator(nn.Module):
             in_channel = out_channel
 
         self.n_latent = self.log_size * 2 - 2
+        
+        
 
     def make_noise(self):
         device = self.input.input.device
@@ -535,6 +685,8 @@ class Generator(nn.Module):
 
         image = skip
 
+        image = model_style(image)
+        # image = stylise(image)
         if return_latents:
             return image, latent
         elif return_features:

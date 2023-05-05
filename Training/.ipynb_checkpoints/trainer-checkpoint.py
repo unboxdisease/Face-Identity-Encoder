@@ -2,22 +2,10 @@ from torchvision import transforms
 
 from Losses.AdversarialLoss import calc_Dw_loss, R1_regulazation
 import torch
-from Losses.NonAdversarialLoss import landmark_loss, rec_loss, l2_loss, id_loss
+from Losses.NonAdversarialLoss import landmark_loss, rec_loss, l2_loss
 from Configs import Global_Config
 import lpips
 import wandb
-import os
-import cv2
-import torch
-import numpy as np
-import torch.nn as nn
-
-from tqdm import tqdm
-from torch.nn import functional as F
-
-
-
-
 
 
 class Trainer:
@@ -43,8 +31,6 @@ class Trainer:
         self.attr_encoder = attr_encoder
         self.landmark_encoder = landmark_encoder
         self.lpips_loss = lpips.LPIPS(net='alex').to(Global_Config.device).eval()
-        
-
 
     def train_discriminator(self, real_w, generated_w):
         self.discriminator_optimizer.zero_grad()
@@ -83,7 +69,7 @@ class Trainer:
         return error_real, error_fake, torch.mean(prediction_real), torch.mean(prediction_fake), g_error, torch.mean(
             g_pred)
 
-    def non_adversarial_train_step(self, id_images, attr_images, fake_data, real_landmarks, use_rec_extra_term,id_vec_real):
+    def non_adversarial_train_step(self, id_images, attr_images, fake_data, real_landmarks, use_rec_extra_term):
         self.id_encoder.zero_grad()
         self.landmark_encoder.zero_grad()
         self.generator.zero_grad()
@@ -93,20 +79,18 @@ class Trainer:
         generated_images, _ = self.generator(
             [fake_data], input_is_latent=True, return_latents=False
         )
-        
-         
-         
+
         normalized_generated_images = (generated_images + 1) / 2
 
         ## -1 to 1
         if self.config['use_id']:
-            id_loss_val = self.config['lambdaID'] * id_loss(id_vec_real,self.id_encoder.extract_feats(generated_images))
+            id_loss_val = self.config['lambdaID'] * self.id_encoder(generated_images, (id_images * 2) - 1)
             total_loss += id_loss_val
             wandb.log({'id_loss_val': id_loss_val.detach().cpu()}, step=Global_Config.step)
 
         if self.config['use_landmark']:
             generated_landmarks, generated_landmarks_nojawline = self.landmark_encoder(normalized_generated_images)
-            landmark_loss_val = landmark_loss(generated_landmarks, real_landmarks) * self.config['lambdaLND']
+            landmark_loss_val = landmark_loss(generated_landmarks_nojawline, real_landmarks) * self.config['lambdaLND']
             total_loss += landmark_loss_val
             wandb.log({'landmark_loss_val': landmark_loss_val.detach().cpu()}, step=Global_Config.step)
 

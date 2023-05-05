@@ -21,3 +21,4 @@ Weights/stylegan2-ffhq-config-f.pt
 
 *.pt
 /Weights/
+./pretrained

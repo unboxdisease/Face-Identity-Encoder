@@ -10,15 +10,15 @@ class Inception(nn.Module):
     def __init__(self, full_inception=None):
         super(Inception, self).__init__()
         if full_inception is None:
-            full_inception = torch.hub.load('pytorch/vision:v0.6.0', 'inception_v3', pretrained=True,
-                                            aux_logits=False, init_weights=False)
+            full_inception = torchvision.models.resnet18(pretrained=True)
+            full_inception.aux_logits = False
             removed = list(full_inception.children())[:-1]
         else:
             removed = list(full_inception.children())
 
         self.model = nn.Sequential(*removed)
-        self.preprocess = transforms.Compose([transforms.Resize(299),
-                                              transforms.CenterCrop(299)])
+        self.preprocess = transforms.Compose([transforms.Resize(224),
+                                              transforms.CenterCrop(224)])
 
     def forward(self, data):
         resized_data = self.preprocess(data)
