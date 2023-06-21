@@ -7,6 +7,7 @@ import torch.nn as nn
 from .op.fused_act import FusedLeakyReLU, fused_leaky_relu
 from .op.upfirdn2d import upfirdn2d
 import torchvision.transforms as transforms
+from Configs import Global_Config
 ###Cartooner-----------------------------------------------------------------------------------------------
 
 class ResBlock(nn.Module):
@@ -94,11 +95,12 @@ class SimpleGenerator(nn.Module):
         up3 = self.up3(up2+down2)
         up4 = self.up4(up3+down1)
         return up4
-weight = torch.load('./weight.pth', map_location='cuda:0')
+        
+weight = torch.load('./pretrained/weight.pth', map_location=Global_Config.device)
 model_style = SimpleGenerator()
 model_style.load_state_dict(weight)
 # torch.save(model.state_dict(), 'weight.pth')
-model_style.to('cuda:0')
+model_style.to(Global_Config.device)
 model_style.eval()
 
     
@@ -621,6 +623,7 @@ class Generator(nn.Module):
     def forward(
             self,
             styles,
+            stylize=True,
             return_latents=False,
             return_features=False,
             inject_index=None,
@@ -685,7 +688,8 @@ class Generator(nn.Module):
 
         image = skip
 
-        image = model_style(image)
+        if stylize:
+            image = model_style(image)
         # image = stylise(image)
         if return_latents:
             return image, latent
